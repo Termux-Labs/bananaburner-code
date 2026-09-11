@@ -2,7 +2,7 @@
   "name": "bananaburner-code",
   "displayName": "BananaBurner Code",
   "description": "Manage Bot-Hosting deployments directly inside VS Code and compatible editors. Use power actions, monitor resources, manage packages and domains, edit files and secrets, use the console, and manage backups.",
-  "version": "0.1.7",
+  "version": "0.1.8",
   "publisher": "TermuxLabs",
   "repository": {
     "type": "git",
