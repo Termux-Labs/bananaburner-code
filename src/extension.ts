@@ -592,12 +592,15 @@ export function activate(context: vscode.ExtensionContext) {
       var dep = treeProvider.getDeployment(deploymentId);
       var session = { id: deploymentId, name: dep?.name || deploymentId, config: config, catalogs: catalogs };
       if (startupPanel) {
-        startupPanel.reveal();
-        startupPanel.webview.postMessage({ type: "open", session: session });
+        var existingStartupPanel = startupPanel;
+        existingStartupPanel.reveal();
+        postWebviewMessage(existingStartupPanel, { type: "open", session: session }, function () { return startupPanel !== existingStartupPanel; });
         return;
       }
       var panel = vscode.window.createWebviewPanel("bbStartup", "Startup Configurations", preferredToolViewColumn("bbStartup") || vscode.ViewColumn.Beside, { enableScripts: true, retainContextWhenHidden: true });
       startupPanel = panel;
+      var startupDisposed = false;
+      var postStartupMessage = function (message: any) { postWebviewMessage(panel, message, function () { return startupDisposed; }); };
       panel.webview.html = getStartupHtml(session);
       panel.webview.onDidReceiveMessage(async function (message) {
         if (message.type !== "save" || !message.config) return;
@@ -606,12 +609,12 @@ export function activate(context: vscode.ExtensionContext) {
           if (!next.runtime || !next.runtimeVersion) throw new Error("Runtime and version are required.");
           await api.updateStartup(message.deploymentId, next);
           treeProvider.refresh();
-          panel.webview.postMessage({ type: "saved", deploymentId: message.deploymentId });
+          postStartupMessage({ type: "saved", deploymentId: message.deploymentId });
         } catch (err: any) {
-          panel.webview.postMessage({ type: "error", deploymentId: message.deploymentId, error: err.message || "Could not save startup configuration." });
+          postStartupMessage({ type: "error", deploymentId: message.deploymentId, error: err.message || "Could not save startup configuration." });
         }
       });
-      panel.onDidDispose(function () { startupPanel = undefined; });
+      panel.onDidDispose(function () { startupDisposed = true; startupPanel = undefined; });
     } catch (err: any) { vscode.window.showErrorMessage("Could not load startup configuration: " + err.message); }
   }));
 
@@ -777,6 +780,8 @@ export function activate(context: vscode.ExtensionContext) {
     var pollTimer: ReturnType<typeof setInterval> | undefined;
     var polling = false;
     var ready = false;
+    var disposed = false;
+    var postMessage = function (message: any) { postWebviewMessage(panel, message, function () { return disposed; }); };
     panel.webview.onDidReceiveMessage(async function (msg) {
       console.log("[BB] Resource panel msg:", msg.type, "deploymentId=", deploymentId);
       if (msg.type === "ready") {
@@ -791,53 +796,53 @@ export function activate(context: vscode.ExtensionContext) {
         try {
           await api.powerAction(deploymentId, msg.action);
           var stateLabel = msg.action === "start" ? "starting" : msg.action === "stop" ? "stopping" : "starting";
-          panel.webview.postMessage({ type: "powerResult", message: "Sent " + msg.action + ".", state: stateLabel });
+          postMessage({ type: "powerResult", message: "Sent " + msg.action + ".", state: stateLabel });
           setTimeout(async function () {
             try {
               var fresh = await api.getResources(deploymentId);
-              panel.webview.postMessage({ type: "powerResult", message: "Sent " + msg.action + ".", state: fresh.state });
+              postMessage({ type: "powerResult", message: "Sent " + msg.action + ".", state: fresh.state });
             } catch (refreshErr: any) {
-              panel.webview.postMessage({ type: "powerResult", message: "Power action sent, but status refresh failed: " + actionErrorMessage(refreshErr) });
+              postMessage({ type: "powerResult", message: "Power action sent, but status refresh failed: " + actionErrorMessage(refreshErr) });
             }
             pollResources();
           }, 2000);
         } catch (err: any) {
-          panel.webview.postMessage({ type: "powerResult", message: "Error: " + actionErrorMessage(err) });
+          postMessage({ type: "powerResult", message: "Error: " + actionErrorMessage(err) });
         }
       }
       if (msg.type === "deploymentUpdate") {
-        try { var updated = await api.updateDeployment(deploymentId, msg.name || undefined, msg.description || undefined); panel.webview.postMessage({ type: "deployment", data: updated }); treeProvider.refresh(); panel.webview.postMessage({ type: "powerResult", message: "Deployment details saved." }); }
-        catch (err: any) { panel.webview.postMessage({ type: "powerResult", message: "Error: " + err.message }); }
+        try { var updated = await api.updateDeployment(deploymentId, msg.name || undefined, msg.description || undefined); postMessage({ type: "deployment", data: updated }); treeProvider.refresh(); postMessage({ type: "powerResult", message: "Deployment details saved." }); }
+        catch (err: any) { postMessage({ type: "powerResult", message: "Error: " + err.message }); }
       }
       if (msg.type === "resize") {
         var ramMB = Number(msg.ramMB), cpuPct = Number(msg.cpuPct), storageMB = Number(msg.storageMB);
         if (!Number.isInteger(ramMB) || ramMB < 1 || !Number.isInteger(cpuPct) || cpuPct < 1 || !Number.isInteger(storageMB) || storageMB < 1) {
-          panel.webview.postMessage({ type: "powerResult", message: "Error: RAM, CPU, and storage must be positive whole numbers." });
+          postMessage({ type: "powerResult", message: "Error: RAM, CPU, and storage must be positive whole numbers." });
           return;
         }
         try {
           var resized = await api.resize(deploymentId, ramMB, cpuPct, storageMB);
-          panel.webview.postMessage({ type: "deployment", data: resized });
-          panel.webview.postMessage({ type: "powerResult", message: "Allocation updated." });
+          postMessage({ type: "deployment", data: resized });
+          postMessage({ type: "powerResult", message: "Allocation updated." });
           treeProvider.refresh();
           setTimeout(pollResources, 1000);
-        } catch (err: any) { panel.webview.postMessage({ type: "powerResult", message: "Error: " + err.message }); }
+        } catch (err: any) { postMessage({ type: "powerResult", message: "Error: " + err.message }); }
       }
       if (msg.type === "autoPull") {
-        if (typeof msg.autoPull !== "boolean") { panel.webview.postMessage({ type: "powerResult", message: "Error: Invalid Git auto-pull setting." }); return; }
+        if (typeof msg.autoPull !== "boolean") { postMessage({ type: "powerResult", message: "Error: Invalid Git auto-pull setting." }); return; }
         try {
           var git = await api.setAutoPull(deploymentId, msg.autoPull);
-          panel.webview.postMessage({ type: "git", data: git });
-          panel.webview.postMessage({ type: "powerResult", message: "Git auto-pull " + (git.autoPull ? "enabled." : "disabled.") });
-        } catch (err: any) { panel.webview.postMessage({ type: "powerResult", message: "Error: " + err.message }); }
+          postMessage({ type: "git", data: git });
+          postMessage({ type: "powerResult", message: "Git auto-pull " + (git.autoPull ? "enabled." : "disabled.") });
+        } catch (err: any) { postMessage({ type: "powerResult", message: "Error: " + err.message }); }
       }
       if (msg.type === "slugUpdate") {
         try {
           if (msg.slug) await api.setSlug(deploymentId, msg.slug);
           else await api.removeSlug(deploymentId);
           var updated = await api.getDeployment(deploymentId);
-          panel.webview.postMessage({ type: "deployment", data: updated }); treeProvider.refresh(); panel.webview.postMessage({ type: "powerResult", message: "Domain alias updated." });
-        } catch (err: any) { panel.webview.postMessage({ type: "powerResult", message: "Error: " + err.message }); }
+          postMessage({ type: "deployment", data: updated }); treeProvider.refresh(); postMessage({ type: "powerResult", message: "Domain alias updated." });
+        } catch (err: any) { postMessage({ type: "powerResult", message: "Error: " + err.message }); }
       }
       if (msg.type === "enableDomains" || msg.type === "customDomain" || msg.type === "verifyCustomDomain" || msg.type === "removeCustomDomain") {
         try {
@@ -847,30 +852,31 @@ export function activate(context: vscode.ExtensionContext) {
           if (msg.type === "verifyCustomDomain") { var verify = await api.verifyCustomDomain(deploymentId); message = verify.verified ? "Custom domain verified." : "Not verified" + (verify.reason ? ": " + verify.reason : "."); }
           if (msg.type === "removeCustomDomain") { await api.removeCustomDomain(deploymentId); message = "Custom domain removed."; }
           var refreshed = await api.getDeployment(deploymentId);
-          panel.webview.postMessage({ type: "deployment", data: refreshed });
-          panel.webview.postMessage({ type: "powerResult", message: message });
+          postMessage({ type: "deployment", data: refreshed });
+          postMessage({ type: "powerResult", message: message });
           treeProvider.refresh();
-        } catch (err: any) { panel.webview.postMessage({ type: "powerResult", message: "Error: " + err.message }); }
+        } catch (err: any) { postMessage({ type: "powerResult", message: "Error: " + err.message }); }
       }
     });
     var authFailed = false;
     async function pollResources() {
+      if (disposed) return;
       if (polling) { console.log("[BB] pollResources SKIPPED: request already in flight"); return; }
       polling = true;
       console.log("[BB] pollResources: fetching for", deploymentId);
       try {
         var data = await api.getResources(deploymentId);
         console.log("[BB] pollResources SUCCESS: state=", data.state);
-        panel.webview.postMessage({ type: "resources", data: data });
+        postMessage({ type: "resources", data: data });
         if (authFailed) {
           authFailed = false;
           if (!pollTimer) { pollTimer = setInterval(pollResources, 10000); }
         }
       } catch (err: any) {
         console.log("[BB] pollResources ERROR:", err.message);
-        panel.webview.postMessage({ type: "powerResult", message: "Resource error: " + err.message });
+        postMessage({ type: "powerResult", message: "Resource error: " + err.message });
         if (err.message && err.message.indexOf("expired") !== -1) {
-          panel.webview.postMessage({ type: "authError" });
+          postMessage({ type: "authError" });
           authFailed = true;
           if (pollTimer) { clearInterval(pollTimer); pollTimer = undefined; }
         }
@@ -886,12 +892,12 @@ export function activate(context: vscode.ExtensionContext) {
       var details = results[0];
       var resources = results[1];
       var git = results[2];
-      if (details.status === "fulfilled") panel.webview.postMessage({ type: "deployment", data: details.value });
-      else panel.webview.postMessage({ type: "deploymentError", error: details.reason?.message || "Deployment details unavailable" });
-      if (resources.status === "fulfilled") panel.webview.postMessage({ type: "resources", data: resources.value });
-      else panel.webview.postMessage({ type: "powerResult", message: "Resource error: " + (resources.reason?.message || "Unavailable") });
-      if (git.status === "fulfilled") panel.webview.postMessage({ type: "git", data: git.value });
-      else panel.webview.postMessage({ type: "powerResult", message: "Git settings unavailable: " + (git.reason?.message || "Unavailable") });
+      if (details.status === "fulfilled") postMessage({ type: "deployment", data: details.value });
+      else postMessage({ type: "deploymentError", error: details.reason?.message || "Deployment details unavailable" });
+      if (resources.status === "fulfilled") postMessage({ type: "resources", data: resources.value });
+      else postMessage({ type: "powerResult", message: "Resource error: " + (resources.reason?.message || "Unavailable") });
+      if (git.status === "fulfilled") postMessage({ type: "git", data: git.value });
+      else postMessage({ type: "powerResult", message: "Git settings unavailable: " + (git.reason?.message || "Unavailable") });
     }
 
     async function loadDetails() {
@@ -901,12 +907,12 @@ export function activate(context: vscode.ExtensionContext) {
           console.log("[BB] loadDetails: getDeployment attempt", attempt + 1);
           var details = await api.getDeployment(deploymentId);
           console.log("[BB] loadDetails: getDeployment SUCCESS, name=", details.name, "state=", details.state);
-          panel.webview.postMessage({ type: "deployment", data: details });
+          postMessage({ type: "deployment", data: details });
           break;
         } catch (err: any) {
           console.log("[BB] loadDetails: getDeployment attempt", attempt + 1, "FAILED:", err.message);
           if (attempt === 2) {
-            panel.webview.postMessage({ type: "deploymentError", error: err.message });
+            postMessage({ type: "deploymentError", error: err.message });
           } else {
             await new Promise(function (r) { setTimeout(r, 2000 * (attempt + 1)); });
           }
@@ -917,12 +923,12 @@ export function activate(context: vscode.ExtensionContext) {
           console.log("[BB] loadDetails: getGit attempt", gitAttempt + 1);
           var git = await api.getGit(deploymentId);
           console.log("[BB] loadDetails: getGit SUCCESS");
-          panel.webview.postMessage({ type: "git", data: git });
+          postMessage({ type: "git", data: git });
           break;
         } catch (err: any) {
           console.log("[BB] loadDetails: getGit attempt", gitAttempt + 1, "FAILED:", err.message);
           if (gitAttempt === 1) {
-            panel.webview.postMessage({ type: "powerResult", message: "Git settings unavailable: " + err.message });
+            postMessage({ type: "powerResult", message: "Git settings unavailable: " + err.message });
           } else {
             await new Promise(function (r) { setTimeout(r, 1500); });
           }
@@ -930,6 +936,7 @@ export function activate(context: vscode.ExtensionContext) {
       }
     }
     panel.onDidDispose(function () {
+      disposed = true;
       if (resourcePanels.get(deploymentId) === panel) resourcePanels.delete(deploymentId);
       if (automaticManagePanel === panel) automaticManagePanel = undefined;
       if (pollTimer) { clearInterval(pollTimer); pollTimer = undefined; }
