@@ -28,6 +28,13 @@ function actionErrorMessage(err: any): string {
   return message;
 }
 
+function postWebviewMessage(target: { webview: vscode.Webview }, message: any, isDisposed: () => boolean): void {
+  if (isDisposed()) return;
+  void target.webview.postMessage(message).then(undefined, function (err) {
+    if (!isDisposed()) console.error("[BB] Webview message failed:", err?.message || err);
+  });
+}
+
 async function pickDeployment(): Promise<Deployment | undefined> {
   var deps = treeProvider.getDeploymentList();
   if (!deps || deps.length === 0) { vscode.window.showWarningMessage("No deployments loaded."); return undefined; }
@@ -289,15 +296,18 @@ export function activate(context: vscode.ExtensionContext) {
       view.webview.options = { enableScripts: true };
       var timer: ReturnType<typeof setInterval> | undefined;
       var polling = false;
+      var disposed = false;
+      var postMessage = function (message: any) { postWebviewMessage(view, message, function () { return disposed; }); };
       var render = function () {
+        if (disposed) return;
         view.webview.html = getRebuiltConsoleHtml(activeConsoleDeploymentId ? activeConsoleName : "");
       };
       var poll = async function (force?: boolean) {
-        if (!activeConsoleDeploymentId || polling) return;
+        if (disposed || !activeConsoleDeploymentId || polling) return;
         if (!force && !view.visible) return;
         polling = true;
-        try { var logs = await api.getLogs(activeConsoleDeploymentId, 500); view.webview.postMessage({ type: "logs", lines: logs.lines }); view.webview.postMessage({ type: "connectionState", name: activeConsoleName, state: "connected" }); }
-        catch (err: any) { view.webview.postMessage({ type: "logError", error: err.message }); view.webview.postMessage({ type: "connectionState", name: activeConsoleName, state: "disconnected" }); }
+        try { var logs = await api.getLogs(activeConsoleDeploymentId, 500); postMessage({ type: "logs", lines: logs.lines }); postMessage({ type: "connectionState", name: activeConsoleName, state: "connected" }); }
+        catch (err: any) { postMessage({ type: "logError", error: err.message }); postMessage({ type: "connectionState", name: activeConsoleName, state: "disconnected" }); }
         finally { polling = false; }
       };
       view.webview.onDidReceiveMessage(async function (msg) {
@@ -305,7 +315,7 @@ export function activate(context: vscode.ExtensionContext) {
         if (msg.type === "ready") {
           console.log("[BB] Console ready, activeConsoleDeploymentId=", activeConsoleDeploymentId, "activeConsoleName=", activeConsoleName);
           poll(true);
-          view.webview.postMessage({ type: "connectionState", name: activeConsoleName, state: "reconnecting" });
+          postMessage({ type: "connectionState", name: activeConsoleName, state: "reconnecting" });
         }
         if (msg.type === "pollLogs") {
           poll();
@@ -321,32 +331,32 @@ export function activate(context: vscode.ExtensionContext) {
           var command = typeof msg.command === "string" ? msg.command.trim() : "";
           var commandDeploymentId = activeConsoleDeploymentId;
           console.log("[BB] sendCommand: deploymentId=", commandDeploymentId, "command=", command);
-          if (!commandDeploymentId) { console.log("[BB] sendCommand BLOCKED: no activeConsoleDeploymentId"); view.webview.postMessage({ type: "cmdError", error: "Select a deployment before sending a command." }); return; }
-          if (!command) { console.log("[BB] sendCommand BLOCKED: empty command"); view.webview.postMessage({ type: "cmdError", error: "Enter a command." }); return; }
-          view.webview.postMessage({ type: "cmdSending" });
+          if (!commandDeploymentId) { console.log("[BB] sendCommand BLOCKED: no activeConsoleDeploymentId"); postMessage({ type: "cmdError", error: "Select a deployment before sending a command." }); return; }
+          if (!command) { console.log("[BB] sendCommand BLOCKED: empty command"); postMessage({ type: "cmdError", error: "Enter a command." }); return; }
+          postMessage({ type: "cmdSending" });
           try {
             console.log("[BB] sendCommand calling api.sendCommand...");
             await api.sendCommand(commandDeploymentId, command);
             console.log("[BB] sendCommand SUCCESS");
-            view.webview.postMessage({ type: "cmdAccepted", message: "Command accepted by the server. Waiting for output…" });
-            view.webview.postMessage({ type: "cmdSent" });
-            view.webview.postMessage({ type: "connectionState", name: activeConsoleName, state: "connected" });
+            postMessage({ type: "cmdAccepted", message: "Command accepted by the server. Waiting for output…" });
+            postMessage({ type: "cmdSent" });
+            postMessage({ type: "connectionState", name: activeConsoleName, state: "connected" });
             [1000, 2000, 3500, 5000, 7500, 10000].forEach(function (delay) {
               setTimeout(function () {
-                if (activeConsoleDeploymentId === commandDeploymentId) poll(true);
+                if (!disposed && activeConsoleDeploymentId === commandDeploymentId) poll(true);
               }, delay);
             });
           } catch (err: any) {
             console.log("[BB] sendCommand ERROR:", err.message);
-            view.webview.postMessage({ type: "cmdError", error: err.message });
-            view.webview.postMessage({ type: "connectionState", name: activeConsoleName, state: "disconnected" });
+            postMessage({ type: "cmdError", error: err.message });
+            postMessage({ type: "connectionState", name: activeConsoleName, state: "disconnected" });
           }
         }
       });
       render();
       timer = setInterval(poll, 10000);
       view.onDidChangeVisibility(function () { if (view.visible) poll(true); });
-      view.onDidDispose(function () { if (timer) clearInterval(timer); if (consoleBottomView === view) consoleBottomView = undefined; });
+      view.onDidDispose(function () { disposed = true; if (timer) clearInterval(timer); if (consoleBottomView === view) consoleBottomView = undefined; });
       (view as any).bbRender = render;
     }
   }, { webviewOptions: { retainContextWhenHidden: true } }));
