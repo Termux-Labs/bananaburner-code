@@ -1,0 +1,541 @@
+{
+  "name": "bananaburner-tools",
+  "displayName": "BananaBurner Tools",
+  "description": "Manage Bot-Hosting deployments directly inside VS Code and compatible editors. Use power actions, monitor resources, manage packages and domains, edit files and secrets, use the console, and manage backups.",
+  "version": "0.1.7",
+  "publisher": "TermuxLabs",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Termux-Labs/banana-burner-tools.git"
+  },
+  "license": "MIT",
+  "keywords": [
+    "bot-hosting",
+    "deployments",
+    "remote files",
+    "server management",
+    "console",
+    "backups",
+    "domains",
+    "resources"
+  ],
+  "icon": "icons/icon128.png",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "bb.connect",
+        "title": "Connect (OAuth)",
+        "icon": "$(sign-in)"
+      },
+      {
+        "command": "bb.connectApiKey",
+        "title": "Connect (Key)",
+        "icon": "$(key)"
+      },
+      {
+        "command": "bb.manageConnection",
+        "title": "Manage Connection",
+        "icon": "$(gear)"
+      },
+      {
+        "command": "bb.disconnect",
+        "title": "Disconnect",
+        "icon": "$(sign-out)"
+      },
+      {
+        "command": "bb.refresh",
+        "title": "Refresh",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "bb.searchFiles",
+        "title": "Search",
+        "icon": "$(search)"
+      },
+      {
+        "command": "bb.openFile",
+        "title": "Open",
+        "icon": "$(go-to-file)"
+      },
+      {
+        "command": "bb.renameFile",
+        "title": "Rename",
+        "icon": "$(edit)"
+      },
+      {
+        "command": "bb.duplicateFile",
+        "title": "Duplicate",
+        "icon": "$(copy)"
+      },
+      {
+        "command": "bb.uploadFile",
+        "title": "Upload Text File",
+        "icon": "$(cloud-upload)"
+      },
+      {
+        "command": "bb.downloadFile",
+        "title": "Download",
+        "icon": "$(cloud-download)"
+      },
+      {
+        "command": "bb.saveFile",
+        "title": "Save",
+        "icon": "$(save)"
+      },
+      {
+        "command": "bb.deleteFile",
+        "title": "Delete",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "bb.createFile",
+        "title": "New File",
+        "icon": "$(file-add)"
+      },
+      {
+        "command": "bb.createFolder",
+        "title": "New Folder",
+        "icon": "$(new-folder)"
+      },
+      {
+        "command": "bb.powerAction",
+        "title": "Power",
+        "icon": "$(zap)"
+      },
+      {
+        "command": "bb.powerStart",
+        "title": "Start",
+        "icon": "$(play)"
+      },
+      {
+        "command": "bb.powerStop",
+        "title": "Stop",
+        "icon": "$(debug-stop)"
+      },
+      {
+        "command": "bb.powerRestart",
+        "title": "Restart",
+        "icon": "$(debug-restart)"
+      },
+      {
+        "command": "bb.editEnv",
+        "title": "Edit",
+        "icon": "$(edit)"
+      },
+      {
+        "command": "bb.addEnv",
+        "title": "Add Env",
+        "icon": "$(add)"
+      },
+      {
+        "command": "bb.deleteEnv",
+        "title": "Delete Env",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "bb.reAuthenticate",
+        "title": "Re-authenticate"
+      },
+      {
+        "command": "bb.compressFiles",
+        "title": "Compress Files",
+        "icon": "$(archive)"
+      },
+      {
+        "command": "bb.decompressFile",
+        "title": "Decompress",
+        "icon": "$(file-zip)"
+      },
+      {
+        "command": "bb.editStartup",
+        "title": "Edit Startup",
+        "icon": "$(terminal)"
+      },
+      {
+        "command": "bb.addPackage",
+        "title": "Add Package",
+        "icon": "$(package)"
+      },
+      {
+        "command": "bb.removePackage",
+        "title": "Remove Package",
+        "icon": "$(remove-close)"
+      },
+      {
+        "command": "bb.createBackup",
+        "title": "Create Backup",
+        "icon": "$(database)"
+      },
+      {
+        "command": "bb.restoreBackup",
+        "title": "Restore Backup",
+        "icon": "$(discard)"
+      },
+      {
+        "command": "bb.deleteBackup",
+        "title": "Delete Backup",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "bb.openConsole",
+        "title": "Open Console",
+        "icon": "$(terminal)"
+      },
+      {
+        "command": "bb.sendCommand",
+        "title": "Send Command",
+        "icon": "$(send)"
+      },
+      {
+        "command": "bb.openResources",
+        "title": "Manage Deployment",
+        "icon": "$(pulse)"
+      },
+      {
+        "command": "bb.syncDeployment",
+        "title": "Sync Git",
+        "icon": "$(sync)"
+      },
+      {
+        "command": "bb.diffFile",
+        "title": "Diff",
+        "icon": "$(diff)"
+      },
+      {
+        "command": "bb.touchRefresh",
+        "title": "⟳ Refresh",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "bb.touchSearch",
+        "title": "⌕ Search",
+        "icon": "$(search)"
+      },
+      {
+        "command": "bb.touchStart",
+        "title": "Start",
+        "icon": "$(play)"
+      },
+      {
+        "command": "bb.touchStop",
+        "title": "Stop",
+        "icon": "$(debug-stop)"
+      },
+      {
+        "command": "bb.touchRestart",
+        "title": "Restart",
+        "icon": "$(debug-restart)"
+      },
+      {
+        "command": "bb.touchConsole",
+        "title": ">_ Console",
+        "icon": "$(terminal)"
+      },
+      {
+        "command": "bb.touchResources",
+        "title": "▦ Resources",
+        "icon": "$(pulse)"
+      }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "bb",
+          "title": "BananaBurner",
+          "icon": "icons/icon128.png"
+        }
+      ],
+      "panel": [
+        {
+          "id": "bbPanel",
+          "title": "BananaBurner",
+          "icon": "icons/icon128.png"
+        }
+      ]
+    },
+    "views": {
+      "bb": [
+        {
+          "id": "bbServers",
+          "name": "Deployments",
+          "icon": "icons/icon128.png"
+        }
+      ],
+      "bbPanel": [
+        {
+          "type": "webview",
+          "id": "bbConsolePanel",
+          "name": "Console",
+          "icon": "icons/icon128.png"
+        }
+      ]
+    },
+    "menus": {
+      "view/title": [
+        {
+          "command": "bb.refresh",
+          "when": "view == bbServers",
+          "group": "navigation"
+        },
+        {
+          "command": "bb.searchFiles",
+          "when": "view == bbServers && bb:connected",
+          "group": "navigation@0"
+        },
+        {
+          "command": "bb.connect",
+          "when": "view == bbServers && !bb:connected",
+          "group": "navigation@1"
+        },
+        {
+          "command": "bb.connectApiKey",
+          "when": "view == bbServers && !bb:connected",
+          "group": "navigation@2"
+        },
+        {
+          "command": "bb.manageConnection",
+          "when": "view == bbServers && bb:connected",
+          "group": "navigation@1"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "bb.openFile",
+          "when": "view == bbServers && viewItem == file",
+          "group": "inline"
+        },
+        {
+          "command": "bb.downloadFile",
+          "when": "view == bbServers && viewItem == file",
+          "group": "inline@1"
+        },
+        {
+          "command": "bb.uploadFile",
+          "when": "view == bbServers && (viewItem == directory || viewItem == filesSection || viewItem == server)",
+          "group": "2_creation"
+        },
+        {
+          "command": "bb.deleteFile",
+          "when": "view == bbServers && viewItem == file",
+          "group": "1_modification"
+        },
+        {
+          "command": "bb.renameFile",
+          "when": "view == bbServers && (viewItem == file || viewItem == directory)",
+          "group": "1_modification"
+        },
+        {
+          "command": "bb.duplicateFile",
+          "when": "view == bbServers && viewItem == file",
+          "group": "1_modification"
+        },
+        {
+          "command": "bb.deleteFile",
+          "when": "view == bbServers && viewItem == directory",
+          "group": "1_modification"
+        },
+        {
+          "command": "bb.createFile",
+          "when": "view == bbServers && viewItem == directory",
+          "group": "2_creation"
+        },
+        {
+          "command": "bb.createFolder",
+          "when": "view == bbServers && viewItem == directory",
+          "group": "2_creation"
+        },
+        {
+          "command": "bb.createFile",
+          "when": "view == bbServers && viewItem == server",
+          "group": "2_creation"
+        },
+        {
+          "command": "bb.createFolder",
+          "when": "view == bbServers && viewItem == server",
+          "group": "2_creation"
+        },
+        {
+          "command": "bb.powerAction",
+          "when": "view == bbServers && viewItem == server",
+          "group": "3_power"
+        },
+        {
+          "command": "bb.editEnv",
+          "when": "view == bbServers && viewItem == envItem",
+          "group": "inline"
+        },
+        {
+          "command": "bb.deleteEnv",
+          "when": "view == bbServers && viewItem == envItem",
+          "group": "1_modification"
+        },
+        {
+          "command": "bb.addEnv",
+          "when": "view == bbServers && viewItem == envSection",
+          "group": "inline"
+        },
+        {
+          "command": "bb.addEnv",
+          "when": "view == bbServers && viewItem == server",
+          "group": "4_env"
+        },
+        {
+          "command": "bb.editStartup",
+          "when": "view == bbServers && viewItem == startupSection",
+          "group": "inline"
+        },
+        {
+          "command": "bb.addPackage",
+          "when": "view == bbServers && viewItem == packageSection",
+          "group": "inline"
+        },
+        {
+          "command": "bb.removePackage",
+          "when": "view == bbServers && viewItem == packageItem",
+          "group": "1_modification"
+        },
+        {
+          "command": "bb.createBackup",
+          "when": "view == bbServers && viewItem == backupSection",
+          "group": "inline"
+        },
+        {
+          "command": "bb.restoreBackup",
+          "when": "view == bbServers && viewItem == backupItem",
+          "group": "1_modification"
+        },
+        {
+          "command": "bb.deleteBackup",
+          "when": "view == bbServers && viewItem == backupItem",
+          "group": "2_deletion"
+        },
+        {
+          "command": "bb.openConsole",
+          "when": "view == bbServers && viewItem == consoleSection",
+          "group": "inline"
+        },
+        {
+          "command": "bb.sendCommand",
+          "when": "view == bbServers && viewItem == consoleSection",
+          "group": "1_actions"
+        },
+        {
+          "command": "bb.openResources",
+          "when": "view == bbServers && viewItem == server",
+          "group": "5_resources"
+        },
+        {
+          "command": "bb.openResources",
+          "when": "view == bbServers && viewItem == consoleSection",
+          "group": "2_actions"
+        },
+        {
+          "command": "bb.syncDeployment",
+          "when": "view == bbServers && viewItem == gitSection",
+          "group": "inline"
+        },
+        {
+          "command": "bb.decompressFile",
+          "when": "view == bbServers && viewItem == file && ext == zip || ext == tar || ext == gz || ext == 7z || ext == rar",
+          "group": "1_modification"
+        },
+        {
+          "command": "bb.diffFile",
+          "when": "view == bbServers && viewItem == file",
+          "group": "2_diff"
+        },
+        {
+          "command": "bb.powerAction",
+          "when": "view == bbServers && viewItem == server",
+          "group": "3_power"
+        }
+      ],
+      "touchBar": [
+        {
+          "command": "bb.touchRefresh",
+          "group": "navigation@1",
+          "when": "bb:connected && bb:sidebarVisible && bb:activeDeployment"
+        },
+        {
+          "command": "bb.touchSearch",
+          "group": "navigation@2",
+          "when": "bb:connected && bb:sidebarVisible && bb:activeDeployment"
+        },
+        {
+          "command": "bb.touchStart",
+          "group": "power@1",
+          "when": "bb:connected && bb:sidebarVisible && bb:activeDeployment"
+        },
+        {
+          "command": "bb.touchRestart",
+          "group": "power@2",
+          "when": "bb:connected && bb:sidebarVisible && bb:activeDeployment"
+        },
+        {
+          "command": "bb.touchStop",
+          "group": "power@3",
+          "when": "bb:connected && bb:sidebarVisible && bb:activeDeployment"
+        },
+        {
+          "command": "bb.touchConsole",
+          "group": "tools@1",
+          "when": "bb:connected && bb:sidebarVisible && bb:activeDeployment"
+        },
+        {
+          "command": "bb.touchResources",
+          "group": "tools@2",
+          "when": "bb:connected && bb:sidebarVisible && bb:activeDeployment"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "BananaBurner Tools",
+      "properties": {
+        "bananaBurner.authServerUrl": {
+          "type": "string",
+          "default": "https://bot-hosting.net",
+          "description": "OAuth2 authorization server URL"
+        },
+        "bananaBurner.clientId": {
+          "type": "string",
+          "default": "bhc_76a5fbc39adc8c874737a75e1d1e307680bc18fe58b9d28de917123530e7b6cf",
+          "description": "OAuth2 client ID"
+        },
+        "bananaBurner.apiBaseUrl": {
+          "type": "string",
+          "default": "https://bot-hosting.net/api/v1",
+          "description": "Base URL for the hosting service API"
+        },
+        "bananaBurner.autoSelectFamilyAttemptTimeoutMs": {
+          "type": "number",
+          "default": 1000,
+          "minimum": 0,
+          "description": "Timeout in milliseconds for each automatic deployment-family selection attempt"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "lint": "eslint src --ext ts",
+    "package": "vsce package"
+  },
+  "devDependencies": {
+    "@types/node": "^20.19.43",
+    "@types/vscode": "1.85.0",
+    "@typescript-eslint/eslint-plugin": "^8.68.0",
+    "@typescript-eslint/parser": "^8.68.0",
+    "@vscode/vsce": "^3.9.2",
+    "eslint": "^10.9.1",
+    "typescript": "^5.9.3"
+  }
+}
