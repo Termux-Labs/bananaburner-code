@@ -1,6 +1,6 @@
 {
   "name": "banana-burner-tools",
-  "displayName": "BananaBurner Tools",
+  "displayName": "BananaBurner-Tools",
   "description": "Manage Bot-Hosting deployments directly inside VS Code and compatible editors. Use power actions, monitor resources, manage packages and domains, edit files and secrets, use the console, and manage backups.",
   "version": "0.1.7",
   "publisher": "TermuxLabs",
