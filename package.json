@@ -1,12 +1,12 @@
 {
-  "name": "banana-burner-tools",
-  "displayName": "BananaBurner-Tools",
+  "name": "bananaburner-code",
+  "displayName": "BananaBurner Code",
   "description": "Manage Bot-Hosting deployments directly inside VS Code and compatible editors. Use power actions, monitor resources, manage packages and domains, edit files and secrets, use the console, and manage backups.",
   "version": "0.1.7",
   "publisher": "TermuxLabs",
   "repository": {
     "type": "git",
-    "url": "https://github.com/Termux-Labs/banana-burner-tools.git"
+    "url": "https://github.com/Termux-Labs/bananaburner-code.git"
   },
   "license": "MIT",
   "keywords": [
@@ -496,7 +496,7 @@
       ]
     },
     "configuration": {
-      "title": "BananaBurner Tools",
+      "title": "BananaBurner Code",
       "properties": {
         "bananaBurner.authServerUrl": {
           "type": "string",
