@@ -57,9 +57,11 @@ npm run lint
 
 Start the extension with the `Run Extension` launch configuration in VS Code.
 
-or
+## Installation
 
-Download .vsix from releases and install.
+Install from Visual Studio Code Marketplace
+or
+Download .vsix from latest release and install
 
 ## License
 
