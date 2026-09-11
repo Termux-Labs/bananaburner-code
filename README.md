@@ -63,6 +63,11 @@ Install from [Visual Studio Marketplace](https://marketplace.visualstudio.com/it
 or
 Download .vsix from [latest release](https://github.com/Termux-Labs/bananaburner-code/releases) and install
 
+
+Feel free to fork & submit a PR
+or
+Create an issue for Bug Reports.
+
 ## License
 
 [MIT](https://github.com/Termux-Labs/banana-burner-tools/blob/main/LICENSE)
