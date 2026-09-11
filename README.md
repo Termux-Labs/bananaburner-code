@@ -59,9 +59,9 @@ Start the extension with the `Run Extension` launch configuration in VS Code.
 
 ## Installation
 
-Install from Visual Studio Code Marketplace
+Install from [Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=TermuxLabs.bananaburner-code#overview)
 or
-Download .vsix from latest release and install
+Download .vsix from [latest release](https://github.com/Termux-Labs/bananaburner-code/releases) and install
 
 ## License
 
