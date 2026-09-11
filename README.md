@@ -1,4 +1,4 @@
-# BananaBurner Tools
+# BananaBurner Code
 
 Manage your Bot-Hosting deployments from your editor.
 
@@ -22,7 +22,7 @@ You can connect with:
 - OAuth
 - A Bot-Hosting API key
 
-Use the BananaBurner Tools icon in the Activity Bar to connect.
+Use the BananaBurner Code icon in the Activity Bar to connect.
 
 ## Editors
 
