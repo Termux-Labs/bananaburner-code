@@ -339,11 +339,11 @@ export class BotHostingApi {
   }
 
   async sendCommand(id: string, command: string): Promise<{ ok: boolean; note?: string }> {
-    return this.request("/deployments/" + encodeURIComponent(id) + "/command", { method: "POST", body: JSON.stringify({ command: command }) });
+    return this.request("/deployments/" + encodeURIComponent(id) + "/command", { method: "PATCH", body: JSON.stringify({ command: command }) });
   }
 
-  async runShellCommand(id: string, command: string): Promise<{ ok: boolean; output?: string; note?: string }> {
-    return this.request("/deployments/" + encodeURIComponent(id) + "/shell", { method: "POST", body: JSON.stringify({ command: command }) });
+  async runShellCommand(id: string, command: string): Promise<{ ok?: boolean; output?: string; stdout?: string; result?: string; note?: string }> {
+    return this.request("/deployments/" + encodeURIComponent(id) + "/shell", { method: "PATCH", body: JSON.stringify({ command: command }) });
   }
 
   async getResources(id: string): Promise<ResourceUsage> {
