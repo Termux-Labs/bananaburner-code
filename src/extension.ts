@@ -158,7 +158,7 @@ function getConsoleHtml(deploymentName: string): string {
     "var vscode=acquireVsCodeApi(),log=document.getElementById('log'),cmd=document.getElementById('cmd'),send=document.getElementById('send'),fontLabel=document.getElementById('font-label'),fontState=" + initialFontPreference + ",paused=false,follow=true,history=[],historyIndex=0,localCommands=[],rapidPollTimer=null,waitingForOutput=false;" +
     "function applyFont(){document.body.style.fontSize=fontState.auto?'':fontState.fontSize+'px';fontLabel.textContent=fontState.auto?'Auto':fontState.fontSize+'px';vscode.setState(fontState);vscode.postMessage({type:'fontSettings',settings:{auto:!!fontState.auto,fontSize:fontState.fontSize}});}function manual(delta){fontState.auto=false;fontState.fontSize=Math.max(10,Math.min(22,(fontState.fontSize||13)+delta));applyFont();}document.getElementById('smaller').onclick=function(){manual(-1);};document.getElementById('larger').onclick=function(){manual(1);};document.getElementById('auto').onclick=function(){fontState.auto=true;applyFont();};applyFont();var serverInfo=document.getElementById('server-info');function setConnectionState(name,state){if(!serverInfo)return;var cls='connected',label='Connected';if(state==='disconnected'){cls='disconnected';label='Disconnected';}else if(state==='reconnecting'){cls='reconnecting';label='Reconnecting...';}serverInfo.innerHTML=(name?name+' \u00b7 ':'')+'<span class=\"server-dot '+cls+'\">'+label;}" +
     "function addLine(t,c){var d=document.createElement('div');d.className='line'+(c?' '+c:'');d.dataset.raw=String(t);var state={fg:'',bg:'',bold:false,dim:false,underline:false};var p8={30:'#3b8eea',31:'#f14c4c',32:'#23d18b',33:'#e5e510',34:'#569cd6',35:'#bc3fbc',36:'#29b8db',37:'#e5e5e5',90:'#666',91:'#f14c4c',92:'#23d18b',93:'#e5e510',94:'#569cd6',95:'#d670d6',96:'#29b8db',97:'#fff'};var pBg={40:'#1e1e1e',41:'#b42318',42:'#16825d',43:'#9e6a03',44:'#1158c7',45:'#6e40c9',46:'#116383',47:'#bbb'};function ansi256(n){if(n<8)return['#3b8eea','#f14c4c','#23d18b','#e5e510','#569cd6','#bc3fbc','#29b8db','#e5e5e5'][n];if(n<16)return['#666','#f14c4c','#23d18b','#e5e510','#569cd6','#d670d6','#29b8db','#fff'][n-8];var i=n-16,r=Math.floor(i/36),g=Math.floor((i%36)/6),b=i%6;return'rgb('+(r?r*40+55:0)+','+(g?g*40+55:0)+','+(b?b*40+55:0)+')';}function text(v){if(!v)return;var s=document.createElement('span');s.textContent=v;if(state.fg)s.style.color=state.fg;if(state.bg)s.style.backgroundColor=state.bg;if(state.bold)s.style.fontWeight='bold';if(state.dim)s.style.opacity='0.6';if(state.underline)s.style.textDecoration='underline';d.appendChild(s);}var re=new RegExp(String.fromCharCode(27)+String.fromCharCode(92)+String.fromCharCode(91)+'([0-9;]*)m','g'),last=0,m,value=String(t);while((m=re.exec(value))!==null){text(value.slice(last,m.index));var params=(m[1]||'0').split(';').map(Number);var i=0;while(i<params.length){var p=params[i];if(p===0){state.fg='';state.bg='';state.bold=false;state.dim=false;state.underline=false;}else if(p===1){state.bold=true;}else if(p===2){state.dim=true;}else if(p===4){state.underline=true;}else if(p===22){state.bold=false;state.dim=false;}else if(p===24){state.underline=false;}else if(p===39){state.fg='';}else if(p===49){state.bg='';}else if(p8[p]){state.fg=p8[p];}else if(pBg[p]){state.bg=pBg[p];}else if(p===38&&params[i+1]===5&&params[i+2]!==undefined){state.fg=ansi256(params[i+2]);i+=2;}else if(p===48&&params[i+1]===5&&params[i+2]!==undefined){state.bg=ansi256(params[i+2]);i+=2;}else if(p===38&&params[i+1]===2&&params[i+4]!==undefined){state.fg='rgb('+params[i+2]+','+params[i+3]+','+params[i+4]+')';i+=4;}else if(p===48&&params[i+1]===2&&params[i+4]!==undefined){state.bg='rgb('+params[i+2]+','+params[i+3]+','+params[i+4]+')';i+=4;}i++;}last=re.lastIndex;}text(value.slice(last));log.appendChild(d);if(follow)log.scrollTop=log.scrollHeight;}" +
-    "function renderLogs(lines){var wasAtBottom=log.scrollTop+log.clientHeight>=log.scrollHeight-4;log.innerHTML='';(lines||[]).forEach(function(line){addLine(line);});localCommands.forEach(function(line){addLine('> '+line,'info');});if(waitingForOutput){addLine('⏳ Waiting for command output...','info');}if(wasAtBottom&&follow)log.scrollTop=log.scrollHeight;}" +
+    "function renderLogs(lines){var wasAtBottom=log.scrollTop+log.clientHeight>=log.scrollHeight-4;log.innerHTML='';(lines||[]).forEach(function(line){addLine(line);});if(waitingForOutput){addLine('⏳ Waiting for command output...','info');}if(wasAtBottom&&follow)log.scrollTop=log.scrollHeight;}" +
     "function startRapidPoll(){if(rapidPollTimer)return;waitingForOutput=true;var remaining=10;rapidPollTimer=setInterval(function(){vscode.postMessage({type:'pollLogs'});remaining--;if(remaining<=0){clearInterval(rapidPollTimer);rapidPollTimer=null;waitingForOutput=false;}},2000);}" +
     "window.addEventListener('message',function(e){" +
     "  var m=e.data;" +
@@ -360,26 +360,34 @@ export function activate(context: vscode.ExtensionContext) {
         }
         if (msg.type === "sendCommand") {
           var command = typeof msg.command === "string" ? msg.command.trim() : "";
+          var mode = msg.mode === "shell" ? "shell" : "stdin";
           var commandDeploymentId = activeConsoleDeploymentId;
-          console.log("[BB] sendCommand: deployment selected=", !!commandDeploymentId);
-          if (!commandDeploymentId) { console.log("[BB] sendCommand BLOCKED: no activeConsoleDeploymentId"); postMessage({ type: "cmdError", error: "Select a deployment before sending a command." }); return; }
-          if (!command) { console.log("[BB] sendCommand BLOCKED: empty command"); postMessage({ type: "cmdError", error: "Enter a command." }); return; }
+          if (!commandDeploymentId) { postMessage({ type: "cmdError", error: "Select a deployment before sending a command." }); return; }
+          if (!command) { postMessage({ type: "cmdError", error: "Enter a command." }); return; }
           postMessage({ type: "cmdSending" });
           try {
-            await api.sendCommand(commandDeploymentId, command);
-            console.log("[BB] sendCommand SUCCESS");
-            postMessage({ type: "cmdAccepted", message: "Command accepted by the server. Waiting for output…" });
-            postMessage({ type: "cmdSent" });
-            postMessage({ type: "connectionState", name: activeConsoleName, state: "connected" });
-            [1000, 2000, 3500, 5000, 7500, 10000].forEach(function (delay) {
-              setTimeout(function () {
-                if (!disposed && activeConsoleDeploymentId === commandDeploymentId) poll(true);
-              }, delay);
-            });
+            if (mode === "shell") {
+              var shellResult = await api.runShellCommand(commandDeploymentId, command);
+              if (!shellResult.ok) throw new Error(shellResult.note || "Shell command failed.");
+              if (activeConsoleDeploymentId !== commandDeploymentId) return;
+              var shellOutput = typeof shellResult.output === "string" ? shellResult.output : typeof (shellResult as any).stdout === "string" ? (shellResult as any).stdout : typeof (shellResult as any).result === "string" ? (shellResult as any).result : "";
+              if (shellOutput) postMessage({ type: "commandOutput", text: shellOutput });
+              else postMessage({ type: "cmdAccepted", message: shellResult.note || "Shell command completed." });
+              postMessage({ type: "cmdSent" });
+            } else {
+              var stdinResult = await api.sendCommand(commandDeploymentId, command);
+              if (!stdinResult.ok) throw new Error(stdinResult.note || "The server did not accept the command.");
+              if (activeConsoleDeploymentId !== commandDeploymentId) return;
+              postMessage({ type: "commandNotice", message: "Command sent." });
+              postMessage({ type: "cmdSent" });
+              [1000, 2000, 3500, 5000, 7500, 10000].forEach(function (delay) {
+                setTimeout(function () {
+                  if (!disposed && activeConsoleDeploymentId === commandDeploymentId) poll(true);
+                }, delay);
+              });
+            }
           } catch (err: any) {
-            console.log("[BB] sendCommand ERROR:", err.message);
-            postMessage({ type: "cmdError", error: err.message });
-            postMessage({ type: "connectionState", name: activeConsoleName, state: "disconnected" });
+            if (activeConsoleDeploymentId === commandDeploymentId) postMessage({ type: "cmdError", error: err.message });
           }
         }
       });
