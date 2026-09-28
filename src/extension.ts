@@ -368,9 +368,9 @@ export function activate(context: vscode.ExtensionContext) {
           try {
             if (mode === "shell") {
               var shellResult = await api.runShellCommand(commandDeploymentId, command);
-              if (!shellResult.ok) throw new Error(shellResult.note || "Shell command failed.");
+              if (shellResult.ok === false) throw new Error(shellResult.note || "Shell command failed.");
               if (activeConsoleDeploymentId !== commandDeploymentId) return;
-              var shellOutput = typeof shellResult.output === "string" ? shellResult.output : typeof (shellResult as any).stdout === "string" ? (shellResult as any).stdout : typeof (shellResult as any).result === "string" ? (shellResult as any).result : "";
+              var shellOutput = typeof shellResult.output === "string" ? shellResult.output : typeof shellResult.stdout === "string" ? shellResult.stdout : typeof shellResult.result === "string" ? shellResult.result : "";
               if (shellOutput) postMessage({ type: "commandOutput", text: shellOutput });
               else postMessage({ type: "cmdAccepted", message: shellResult.note || "Shell command completed." });
               postMessage({ type: "cmdSent" });
