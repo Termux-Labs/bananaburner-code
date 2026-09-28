@@ -372,7 +372,7 @@ export function activate(context: vscode.ExtensionContext) {
               if (activeConsoleDeploymentId !== commandDeploymentId) return;
               var shellOutput = typeof shellResult.output === "string" ? shellResult.output : typeof shellResult.stdout === "string" ? shellResult.stdout : typeof shellResult.result === "string" ? shellResult.result : "";
               if (shellOutput) postMessage({ type: "commandOutput", text: shellOutput });
-              else postMessage({ type: "cmdAccepted", message: shellResult.note || "Shell command completed." });
+              postMessage({ type: "commandNotice", message: "Command sent." });
               postMessage({ type: "cmdSent" });
             } else {
               var stdinResult = await api.sendCommand(commandDeploymentId, command);
