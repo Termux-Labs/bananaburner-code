@@ -2,7 +2,7 @@
   "name": "bananaburner-code",
   "displayName": "BananaBurner Code",
   "description": "Manage Bot-Hosting deployments directly inside VS Code and compatible editors. Use power actions, monitor resources, manage packages and domains, edit files and secrets, use the console, and manage backups.",
-  "version": "0.1.8",
+  "version": "0.1.9",
   "publisher": "TermuxLabs",
   "repository": {
     "type": "git",
@@ -95,6 +95,11 @@
         "icon": "$(trash)"
       },
       {
+        "command": "bb.deleteFiles",
+        "title": "Delete Selected Files",
+        "icon": "$(trash)"
+      },
+      {
         "command": "bb.createFile",
         "title": "New File",
         "icon": "$(file-add)"
@@ -112,17 +117,20 @@
       {
         "command": "bb.powerStart",
         "title": "Start",
-        "icon": "$(play)"
+        "icon": "$(play)",
+        "enablement": "bb:deploymentState == offline || bb:deploymentState == unknown"
       },
       {
         "command": "bb.powerStop",
         "title": "Stop",
-        "icon": "$(debug-stop)"
+        "icon": "$(debug-stop)",
+        "enablement": "bb:deploymentState == running || bb:deploymentState == starting || bb:deploymentState == unknown"
       },
       {
         "command": "bb.powerRestart",
         "title": "Restart",
-        "icon": "$(debug-restart)"
+        "icon": "$(debug-restart)",
+        "enablement": "bb:deploymentState == running || bb:deploymentState == starting || bb:deploymentState == unknown"
       },
       {
         "command": "bb.editEnv",
@@ -327,6 +335,11 @@
           "group": "1_modification"
         },
         {
+          "command": "bb.deleteFiles",
+          "when": "view == bbServers && viewItem == file",
+          "group": "1_modification@1"
+        },
+        {
           "command": "bb.renameFile",
           "when": "view == bbServers && (viewItem == file || viewItem == directory)",
           "group": "1_modification"
@@ -365,6 +378,21 @@
           "command": "bb.powerAction",
           "when": "view == bbServers && viewItem == server",
           "group": "3_power"
+        },
+        {
+          "command": "bb.powerStart",
+          "when": "view == bbServers && viewItem == server && (bb:deploymentState == offline || bb:deploymentState == unknown)",
+          "group": "3_power@1"
+        },
+        {
+          "command": "bb.powerRestart",
+          "when": "view == bbServers && viewItem == server && (bb:deploymentState == running || bb:deploymentState == starting || bb:deploymentState == unknown)",
+          "group": "3_power@2"
+        },
+        {
+          "command": "bb.powerStop",
+          "when": "view == bbServers && viewItem == server && (bb:deploymentState == running || bb:deploymentState == starting || bb:deploymentState == unknown)",
+          "group": "3_power@3"
         },
         {
           "command": "bb.editEnv",
@@ -471,7 +499,7 @@
         {
           "command": "bb.touchStart",
           "group": "power@1",
-          "when": "bb:connected && bb:sidebarVisible && bb:activeDeployment"
+          "when": "bb:connected && bb:sidebarVisible && bb:activeDeployment && (bb:deploymentState == offline || bb:deploymentState == unknown)"
         },
         {
           "command": "bb.touchRestart",
@@ -481,7 +509,7 @@
         {
           "command": "bb.touchStop",
           "group": "power@3",
-          "when": "bb:connected && bb:sidebarVisible && bb:activeDeployment"
+          "when": "bb:connected && bb:sidebarVisible && bb:activeDeployment && (bb:deploymentState == running || bb:deploymentState == starting || bb:deploymentState == unknown)"
         },
         {
           "command": "bb.touchConsole",
