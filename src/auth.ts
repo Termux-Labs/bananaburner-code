@@ -103,7 +103,7 @@ export class AuthManager {
     authUrl.searchParams.set("response_type", "code");
     authUrl.searchParams.set(
       "scope",
-      "deployments:read deployments:power deployments:write projects:read projects:write files:read files:write env:read env:write backups:read backups:write packages:read packages:write account:read billing:read templates:read"
+      "deployments:read deployments:power deployments:write deployments:shell projects:read projects:write files:read files:write env:read env:write backups:read backups:write packages:read packages:write account:read billing:read templates:read"
     );
     authUrl.searchParams.set("code_challenge", challenge);
     authUrl.searchParams.set("code_challenge_method", "S256");
