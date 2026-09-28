@@ -140,6 +140,7 @@ export interface FileEntry {
   sizeBytes: number;
   modifiedAt: string;
   mode: string;
+  hash?: string;
 }
 
 export interface EnvVar {
@@ -326,8 +327,10 @@ export class BotHostingApi {
   }
 
 
-  async powerAction(id: string, action: "start" | "stop" | "restart" | "kill"): Promise<{ ok: boolean; action: string }> {
-    return this.request("/deployments/" + id + "/power", { method: "POST", body: JSON.stringify({ action: action }) });
+  async powerAction(id: string, action: "start" | "stop" | "restart" | "kill", waitSeconds?: number): Promise<{ ok: boolean; action: string; state?: string; logs?: string[]; reason?: string; hint?: string }> {
+    var body: { action: string; waitSeconds?: number } = { action: action };
+    if (waitSeconds !== undefined) { body.waitSeconds = waitSeconds; }
+    return this.request("/deployments/" + id + "/power", { method: "POST", body: JSON.stringify(body) });
   }
 
   async getLogs(id: string, size?: number): Promise<LogOutput> {
@@ -361,6 +364,16 @@ export class BotHostingApi {
   async listFiles(deploymentId: string, path: string = "/"): Promise<{ path: string; entries: FileEntry[] }> {
     var query = new URLSearchParams({ path: path });
     return this.request("/deployments/" + deploymentId + "/files?" + query);
+  }
+
+  async listFileHistory(deploymentId: string, path: string): Promise<{ path: string; versions: { id: string; savedAt: string; bytes: number }[] }> {
+    var query = new URLSearchParams({ path: path });
+    return this.request("/deployments/" + deploymentId + "/files/history?" + query);
+  }
+
+  async indexFiles(deploymentId: string, path: string = "/", digest?: string): Promise<{ unchanged?: boolean; digest: string; entries: FileEntry[] }> {
+    var data = await this.request<{ unchanged?: boolean; digest: string; entries?: FileEntry[] }>("/deployments/" + deploymentId + "/files/index", { method: "POST", body: JSON.stringify({ path: path, hashMaxBytes: 4 * 1024 * 1024, ...(digest ? { digest: digest } : {}) }) });
+    return { unchanged: data.unchanged, digest: data.digest, entries: data.entries || [] };
   }
 
   async readFile(deploymentId: string, path: string, offset?: number, limit?: number): Promise<FileReadResult> {
