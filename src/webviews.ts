@@ -26,25 +26,25 @@ button,input{font:inherit}button{border:1px solid #555;border-radius:3px;padding
   const state=document.getElementById('state');
   const notice=document.getElementById('notice');
   let noticeTimer;
-  let paused=false,follow=true,history=[],historyIndex=0;
+  let paused=false,follow=true,history=[],historyIndex=0,latestLogs=[],shellOutputHistory=[];
   function line(text,kind){const el=document.createElement('div');el.className='line '+(kind||'');el.textContent=String(text);log.appendChild(el);if(follow)log.scrollTop=log.scrollHeight;}
-  function render(lines){const atBottom=log.scrollTop+log.clientHeight>=log.scrollHeight-8;log.innerHTML='';(lines||[]).forEach(function(x){line(x);});if(atBottom&&follow)log.scrollTop=log.scrollHeight;}
+  function render(lines){const atBottom=log.scrollTop+log.clientHeight>=log.scrollHeight-8;latestLogs=Array.isArray(lines)?lines:[];log.innerHTML='';latestLogs.forEach(function(x){line(x);});const visibleLogs=latestLogs.join('\\n');shellOutputHistory.forEach(function(output){if(visibleLogs.indexOf(output)<0)line(output);});if(atBottom&&follow)log.scrollTop=log.scrollHeight;}
   function setState(value){const text=value==='connected'?'Connected':value==='disconnected'?'Disconnected':'Reconnecting...';state.textContent='';const dot=document.createElement('span');dot.className='dot '+value;state.appendChild(dot);state.appendChild(document.createTextNode(text));}
   window.addEventListener('message',function(event){const m=event.data||{};
     if(m.type==='logs'&&!paused)render(m.lines);
     if(m.type==='connectionState')setState(m.state||'disconnected');
     if(m.type==='logError')line('Error: '+m.error,'error');
-    if(m.type==='cmdSending'){send.disabled=true;command.disabled=true;}
-    if(m.type==='commandNotice'){notice.textContent=m.message||'';clearTimeout(noticeTimer);if(notice.textContent)noticeTimer=setTimeout(function(){notice.textContent='';},2200);}
+    if(m.type==='cmdSending'){send.disabled=true;command.disabled=true;notice.textContent='';clearTimeout(noticeTimer);}
+    if(m.type==='commandNotice'){notice.textContent=m.message||'';clearTimeout(noticeTimer);if(notice.textContent){const duration=Math.min(15000,2200+notice.textContent.length*35);noticeTimer=setTimeout(function(){notice.textContent='';},duration);}}
     if(m.type==='cmdAccepted')line(m.message||'Command accepted.','info');
-    if(m.type==='commandOutput'&&typeof m.text==='string'&&m.text)line(m.text);
+    if(m.type==='commandOutput'&&typeof m.text==='string'&&m.text){shellOutputHistory.push(m.text);if(shellOutputHistory.length>30)shellOutputHistory.shift();render(latestLogs);}
     if(m.type==='cmdSent'){send.disabled=false;command.disabled=false;command.focus();}
     if(m.type==='cmdError'){send.disabled=false;command.disabled=false;line('Error: '+m.error,'error');}
     if(m.type==='authError'){send.disabled=false;command.disabled=false;line('Authentication expired. Reconnect from the sidebar.','error');}
   });
   document.getElementById('pause').onclick=function(){paused=!paused;this.textContent=paused?'Resume':'Pause';};
   document.getElementById('follow').onclick=function(){follow=!follow;this.textContent=follow?'Following':'Follow';};
-  document.getElementById('clear').onclick=function(){log.innerHTML='';};
+  document.getElementById('clear').onclick=function(){shellOutputHistory=[];log.innerHTML='';};
   document.getElementById('copy').onclick=function(){navigator.clipboard.writeText(Array.from(log.children).map(function(x){return x.textContent||'';}).join('\\n'));};
   const mode=document.getElementById('mode');
   function submit(){const value=command.value.trim();if(!value||send.disabled)return;history.push(value);historyIndex=history.length;command.value='';send.disabled=true;command.disabled=true;vscode.postMessage({type:'sendCommand',command:value,mode:mode.value});}
