@@ -12,11 +12,11 @@ body{margin:0;height:100vh;display:flex;flex-direction:column;background:#1e1e1e
 #server{margin-right:auto;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#ccc}.dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:5px;background:#e5e510}.connected{background:#23d18b}.disconnected{background:#f14c4c}
 button,input{font:inherit}button{border:1px solid #555;border-radius:3px;padding:4px 8px;background:#303030;color:#ddd;cursor:pointer}button:hover{background:#3d3d3d}button:disabled{opacity:.5;cursor:default}
 #log{flex:1;overflow:auto;padding:8px;white-space:pre-wrap;word-break:break-word}.line{padding:1px 0}.info{color:#569cd6}.error{color:#f44747}
-#composer{display:flex;gap:6px;padding:6px;border-top:1px solid #333}#command{flex:1;min-width:0;background:#2d2d2d;color:#ddd;border:1px solid #555;border-radius:3px;padding:6px 8px}#command:focus{outline:1px solid #007acc}
+#composer{display:flex;align-items:center;gap:6px;padding:6px;border-top:1px solid #333}#command{flex:1;min-width:0;background:#2d2d2d;color:#ddd;border:1px solid #555;border-radius:3px;padding:6px 8px}#command:focus{outline:1px solid #007acc}#mode{background:#2d2d2d;color:#ddd;border:1px solid #555;border-radius:3px;padding:4px}#notice{color:#9cdcfe;font:12px var(--vscode-font-family,system-ui);min-width:0}
 </style></head><body>
 <div id="toolbar"><span id="server">${name ? name + " &middot; " : ""}<span id="state"><span class="dot"></span>Connecting</span></span><button id="pause">Pause</button><button id="follow">Follow</button><button id="clear">Clear</button><button id="copy">Copy</button></div>
 <div id="log"><div class="line info">${name ? "Connecting to " + name + " console..." : "Select a deployment to open its console."}</div></div>
-<div id="composer"><input id="command" autocomplete="off" placeholder="Type a command and press Enter"><button id="send">Send</button></div>
+<div id="composer"><input id="command" autocomplete="off" placeholder="Type a console command and press Enter"><select id="mode" aria-label="Command mode" title="Choose stdin for the server console or shell to run a command"><option value="stdin">stdin</option><option value="shell">shell</option></select><span id="notice" role="status" aria-live="polite"></span><button id="send">Send</button></div>
 <script>
 (function(){
   const vscode=acquireVsCodeApi();
@@ -24,17 +24,21 @@ button,input{font:inherit}button{border:1px solid #555;border-radius:3px;padding
   const command=document.getElementById('command');
   const send=document.getElementById('send');
   const state=document.getElementById('state');
-  let paused=false,follow=true,history=[],historyIndex=0,localCommands=[];
+  const notice=document.getElementById('notice');
+  let noticeTimer;
+  let paused=false,follow=true,history=[],historyIndex=0;
   function line(text,kind){const el=document.createElement('div');el.className='line '+(kind||'');el.textContent=String(text);log.appendChild(el);if(follow)log.scrollTop=log.scrollHeight;}
-  function render(lines){const atBottom=log.scrollTop+log.clientHeight>=log.scrollHeight-8;log.innerHTML='';(lines||[]).forEach(function(x){line(x);});localCommands.forEach(function(x){line('> '+x,'info');});if(atBottom&&follow)log.scrollTop=log.scrollHeight;}
+  function render(lines){const atBottom=log.scrollTop+log.clientHeight>=log.scrollHeight-8;log.innerHTML='';(lines||[]).forEach(function(x){line(x);});if(atBottom&&follow)log.scrollTop=log.scrollHeight;}
   function setState(value){const text=value==='connected'?'Connected':value==='disconnected'?'Disconnected':'Reconnecting...';state.textContent='';const dot=document.createElement('span');dot.className='dot '+value;state.appendChild(dot);state.appendChild(document.createTextNode(text));}
   window.addEventListener('message',function(event){const m=event.data||{};
     if(m.type==='logs'&&!paused)render(m.lines);
     if(m.type==='connectionState')setState(m.state||'disconnected');
     if(m.type==='logError')line('Error: '+m.error,'error');
-    if(m.type==='cmdSending'){send.disabled=true;command.disabled=true;line('Sending command...','info');}
-    if(m.type==='cmdAccepted')line(m.message||'Command accepted by the server. Waiting for output...','info');
-    if(m.type==='cmdSent'){send.disabled=false;command.disabled=false;command.focus();line('Command sent. Refreshing output...','info');}
+    if(m.type==='cmdSending'){send.disabled=true;command.disabled=true;}
+    if(m.type==='commandNotice'){notice.textContent=m.message||'';clearTimeout(noticeTimer);if(notice.textContent)noticeTimer=setTimeout(function(){notice.textContent='';},2200);}
+    if(m.type==='cmdAccepted')line(m.message||'Command accepted.','info');
+    if(m.type==='commandOutput'&&typeof m.text==='string'&&m.text)line(m.text);
+    if(m.type==='cmdSent'){send.disabled=false;command.disabled=false;command.focus();}
     if(m.type==='cmdError'){send.disabled=false;command.disabled=false;line('Error: '+m.error,'error');}
     if(m.type==='authError'){send.disabled=false;command.disabled=false;line('Authentication expired. Reconnect from the sidebar.','error');}
   });
@@ -42,7 +46,8 @@ button,input{font:inherit}button{border:1px solid #555;border-radius:3px;padding
   document.getElementById('follow').onclick=function(){follow=!follow;this.textContent=follow?'Following':'Follow';};
   document.getElementById('clear').onclick=function(){log.innerHTML='';};
   document.getElementById('copy').onclick=function(){navigator.clipboard.writeText(Array.from(log.children).map(function(x){return x.textContent||'';}).join('\\n'));};
-  function submit(){const value=command.value.trim();if(!value||send.disabled)return;history.push(value);historyIndex=history.length;localCommands.push(value);if(localCommands.length>50)localCommands.shift();line('> '+value,'info');command.value='';send.disabled=true;command.disabled=true;vscode.postMessage({type:'sendCommand',command:value});}
+  const mode=document.getElementById('mode');
+  function submit(){const value=command.value.trim();if(!value||send.disabled)return;history.push(value);historyIndex=history.length;command.value='';send.disabled=true;command.disabled=true;vscode.postMessage({type:'sendCommand',command:value,mode:mode.value});}
   send.onclick=submit;command.onkeydown=function(event){if(event.key==='Enter'){event.preventDefault();submit();}else if(event.key==='ArrowUp'&&history.length){event.preventDefault();historyIndex=Math.max(0,historyIndex-1);command.value=history[historyIndex];}else if(event.key==='ArrowDown'){event.preventDefault();historyIndex=Math.min(history.length,historyIndex+1);command.value=history[historyIndex]||'';}};
   vscode.postMessage({type:'ready'});
 })();
