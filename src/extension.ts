@@ -3,6 +3,7 @@ import { AuthManager } from "./auth";
 import { ApiError, BotHostingApi, Deployment, FileEntry, StartupConfig, RuntimeInfo } from "./api";
 import { ServerTreeProvider, FileItem, EnvItem, SectionItem, PackageItem, BackupItem, ServerItem } from "./treeView";
 import { RemoteFileSystemProvider } from "./remoteFileSystemProvider";
+import { RemoteActivity } from "./progress";
 import { getConsoleHtml as getRebuiltConsoleHtml, getResourceHtml as getRebuiltResourceHtml } from "./webviews";
 
 let api: BotHostingApi;
@@ -89,6 +90,31 @@ function debounce<F extends (...args: any[]) => any>(fn: F, ms: number): F {
     timer = setTimeout(function () { fn.apply(undefined, args); }, ms);
   };
   return Debounced as unknown as F;
+}
+
+async function waitForDeploymentState(deploymentId: string, expected: string, timeoutMs: number = 60000): Promise<Deployment> {
+  var deadline = Date.now() + timeoutMs;
+  var latest = await api.getDeployment(deploymentId);
+  while (latest.state !== expected && Date.now() < deadline) {
+    await new Promise(function (resolve) { setTimeout(resolve, 3000); });
+    latest = await api.getDeployment(deploymentId);
+  }
+  treeProvider.refresh();
+  return latest;
+}
+
+async function runPowerAction(deploymentId: string, action: "start" | "stop" | "restart" | "kill"): Promise<{ state?: string; hint?: string }> {
+  var waitSeconds = action === "start" || action === "restart" ? 20 : 0;
+  var result = await api.powerAction(deploymentId, action, waitSeconds);
+  var expected = action === "start" || action === "restart" ? "running" : action === "stop" || action === "kill" ? "offline" : undefined;
+  if (expected && result.state !== expected) {
+    var latest = await waitForDeploymentState(deploymentId, expected);
+    vscode.commands.executeCommand("setContext", "bb:deploymentState", latest.state);
+    return { state: latest.state, hint: result.hint };
+  }
+  treeProvider.refresh();
+  vscode.commands.executeCommand("setContext", "bb:deploymentState", result.state || "unknown");
+  return { state: result.state, hint: result.hint };
 }
 
 async function getAllFilesRecursive(apiClient: BotHostingApi, deploymentId: string, rootPath: string): Promise<{ deploymentId: string; path: string; name: string }[]> {
@@ -249,11 +275,13 @@ export function activate(context: vscode.ExtensionContext) {
     consoleFontPreference = { auto: savedConsoleFont.auto, fontSize: Math.max(10, Math.min(22, Math.round(savedConsoleFont.fontSize))) };
   }
 
-  fsProvider = new RemoteFileSystemProvider(api);
+  var remoteActivity = new RemoteActivity();
+  fsProvider = new RemoteFileSystemProvider(api, remoteActivity);
+  context.subscriptions.push(remoteActivity);
   context.subscriptions.push(vscode.workspace.registerFileSystemProvider("bh", fsProvider, { isCaseSensitive: true }));
 
   treeProvider = new ServerTreeProvider(api);
-  var treeView = vscode.window.createTreeView("bbServers", { treeDataProvider: treeProvider, showCollapseAll: true });
+  var treeView = vscode.window.createTreeView("bbServers", { treeDataProvider: treeProvider, showCollapseAll: true, canSelectMany: true });
   context.subscriptions.push(treeView);
   var remoteFileStatus = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
   context.subscriptions.push(remoteFileStatus);
@@ -284,10 +312,13 @@ export function activate(context: vscode.ExtensionContext) {
     selectedDeploymentId = deploymentId;
     if (deploymentId) { context.globalState.update("bb.preferredDeployment", deploymentId); }
     vscode.commands.executeCommand("setContext", "bb:activeDeployment", !!deploymentId);
+    var selectedDeployment = deploymentId ? treeProvider.getDeployment(deploymentId) : undefined;
+    vscode.commands.executeCommand("setContext", "bb:deploymentState", selectedDeployment?.state || "unknown");
     if (deploymentId && !activeConsoleDeploymentId) { vscode.commands.executeCommand("bb.openConsole", deploymentId); }
   }));
   vscode.commands.executeCommand("setContext", "bb:sidebarVisible", treeView.visible);
   vscode.commands.executeCommand("setContext", "bb:activeDeployment", false);
+  vscode.commands.executeCommand("setContext", "bb:deploymentState", "unknown");
 
   context.subscriptions.push(vscode.window.registerWebviewViewProvider("bbConsolePanel", {
     resolveWebviewView: function (view) {
@@ -311,7 +342,7 @@ export function activate(context: vscode.ExtensionContext) {
         finally { polling = false; }
       };
       view.webview.onDidReceiveMessage(async function (msg) {
-        console.log("[BB] Console webview msg:", msg.type, msg.type === "sendCommand" ? "command=" + msg.command : "");
+        console.log("[BB] Console webview msg:", msg.type);
         if (msg.type === "ready") {
           console.log("[BB] Console ready, activeConsoleDeploymentId=", activeConsoleDeploymentId, "activeConsoleName=", activeConsoleName);
           poll(true);
@@ -330,12 +361,11 @@ export function activate(context: vscode.ExtensionContext) {
         if (msg.type === "sendCommand") {
           var command = typeof msg.command === "string" ? msg.command.trim() : "";
           var commandDeploymentId = activeConsoleDeploymentId;
-          console.log("[BB] sendCommand: deploymentId=", commandDeploymentId, "command=", command);
+          console.log("[BB] sendCommand: deployment selected=", !!commandDeploymentId);
           if (!commandDeploymentId) { console.log("[BB] sendCommand BLOCKED: no activeConsoleDeploymentId"); postMessage({ type: "cmdError", error: "Select a deployment before sending a command." }); return; }
           if (!command) { console.log("[BB] sendCommand BLOCKED: empty command"); postMessage({ type: "cmdError", error: "Enter a command." }); return; }
           postMessage({ type: "cmdSending" });
           try {
-            console.log("[BB] sendCommand calling api.sendCommand...");
             await api.sendCommand(commandDeploymentId, command);
             console.log("[BB] sendCommand SUCCESS");
             postMessage({ type: "cmdAccepted", message: "Command accepted by the server. Waiting for output…" });
@@ -428,14 +458,15 @@ export function activate(context: vscode.ExtensionContext) {
     if (!item) return;
     var newName = await vscode.window.showInputBox({ prompt: "Rename " + item.file.name, value: item.file.name, validateInput: function (value) { return !value || value.includes("/") ? "Enter a name without /" : null; } });
     if (!newName || newName === item.file.name) return;
-    try { await api.renameFile(item.deploymentId, item.parentPath, item.file.name, newName); treeProvider.refresh(); vscode.window.showInformationMessage("Renamed to " + newName); }
+    var renamedName = newName;
+    try { await remoteActivity.run("Updating remote files", function () { return api.renameFile(item.deploymentId, item.parentPath, item.file.name, renamedName).then(function () { return undefined; }); }); treeProvider.refresh(); vscode.window.showInformationMessage("Renamed to " + renamedName); }
     catch (err: any) { vscode.window.showErrorMessage("Rename failed: " + err.message); }
   }));
 
   context.subscriptions.push(vscode.commands.registerCommand("bb.duplicateFile", async function (item: FileItem) {
     if (!item || item.file.type !== "file") return;
     var location = item.parentPath === "/" ? "/" + item.file.name : item.parentPath + "/" + item.file.name;
-    try { await api.copyFile(item.deploymentId, location); treeProvider.refresh(); vscode.window.showInformationMessage("Created a copy of " + item.file.name); }
+    try { await remoteActivity.run("Updating remote files", function () { return api.copyFile(item.deploymentId, location).then(function () { return undefined; }); }); treeProvider.refresh(); vscode.window.showInformationMessage("Created a copy of " + item.file.name); }
     catch (err: any) { vscode.window.showErrorMessage("Duplicate failed: " + err.message); }
   }));
 
@@ -456,7 +487,7 @@ export function activate(context: vscode.ExtensionContext) {
       }
       var content = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
       var target = parentPath === "/" ? "/" + selected[0].path.split("/").pop() : parentPath + "/" + selected[0].path.split("/").pop();
-      await api.writeFile(deploymentId, target, content);
+      await remoteActivity.run("Uploading", function () { return api.writeFile(deploymentId!, target, content).then(function () { return undefined; }); });
       treeProvider.refresh();
       vscode.window.showInformationMessage("Uploaded " + target);
     } catch (err: any) {
@@ -467,7 +498,7 @@ export function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(vscode.commands.registerCommand("bb.downloadFile", async function (item: FileItem) {
     if (!item || item.file.type !== "file") return;
     var path = item.parentPath === "/" ? "/" + item.file.name : item.parentPath + "/" + item.file.name;
-    try { var result = await api.getDownloadUrl(item.deploymentId, path); await vscode.env.openExternal(vscode.Uri.parse(result.url)); }
+    try { var result = await remoteActivity.run("Downloading", function () { return api.getDownloadUrl(item.deploymentId, path); }); await vscode.env.openExternal(vscode.Uri.parse(result.url)); }
     catch (err: any) { vscode.window.showErrorMessage("Download failed: " + err.message); }
   }));
 
@@ -481,8 +512,26 @@ export function activate(context: vscode.ExtensionContext) {
     if (!item) return;
     var confirm = await vscode.window.showWarningMessage("Delete \"" + item.file.name + "\"?", "Delete", "Cancel");
     if (confirm !== "Delete") return;
-    try { await api.deleteFile(item.deploymentId, item.parentPath, [item.file.name]); treeProvider.refresh(); vscode.window.showInformationMessage("Deleted " + item.file.name); }
+    try { await remoteActivity.run("Updating remote files", function () { return api.deleteFile(item.deploymentId, item.parentPath, [item.file.name]).then(function () { return undefined; }); }); treeProvider.refresh(); vscode.window.showInformationMessage("Deleted " + item.file.name); }
     catch (err: any) { vscode.window.showErrorMessage("Delete failed: " + err.message); }
+  }));
+
+  context.subscriptions.push(vscode.commands.registerCommand("bb.deleteFiles", async function (items: FileItem[] | FileItem) {
+    var selected = Array.isArray(items) ? items : [items];
+    var files = selected.filter(function (item) { return item instanceof FileItem; });
+    if (!files.length) return;
+    var first = files[0];
+    if (!files.every(function (item) { return item.deploymentId === first.deploymentId && item.parentPath === first.parentPath; })) {
+      vscode.window.showWarningMessage("Select files from one remote folder at a time.");
+      return;
+    }
+    var confirm = await vscode.window.showWarningMessage("Delete " + files.length + " selected file(s)?", { modal: true }, "Delete", "Cancel");
+    if (confirm !== "Delete") return;
+    try {
+      await remoteActivity.run("Updating remote files", function () { return api.deleteFile(first.deploymentId, first.parentPath, files.map(function (item) { return item.file.name; })).then(function () { return undefined; }); });
+      treeProvider.refresh();
+      vscode.window.showInformationMessage("Deleted " + files.length + " file(s).");
+    } catch (err: any) { vscode.window.showErrorMessage("Delete failed: " + err.message); }
   }));
 
   context.subscriptions.push(vscode.commands.registerCommand("bb.createFile", async function (item?: any) {
@@ -493,7 +542,7 @@ export function activate(context: vscode.ExtensionContext) {
     else { vscode.window.showWarningMessage("Select a server or directory."); return; }
     var name = await vscode.window.showInputBox({ prompt: "File name", placeHolder: "index.js" });
     if (!name) return;
-    try { await api.writeFile(deploymentId, parentPath === "/" ? "/" + name : parentPath + "/" + name, ""); treeProvider.refresh(); vscode.window.showInformationMessage("Created: " + name); }
+    try { await remoteActivity.run("Uploading", function () { return api.writeFile(deploymentId, parentPath === "/" ? "/" + name : parentPath + "/" + name, "").then(function () { return undefined; }); }); treeProvider.refresh(); vscode.window.showInformationMessage("Created: " + name); }
     catch (err: any) { vscode.window.showErrorMessage("Failed: " + err.message); }
   }));
 
@@ -505,20 +554,21 @@ export function activate(context: vscode.ExtensionContext) {
     else { vscode.window.showWarningMessage("Select a server or directory."); return; }
     var name = await vscode.window.showInputBox({ prompt: "Folder name", placeHolder: "new-folder" });
     if (!name) return;
-    try { await api.createFolder(deploymentId, parentPath, name); treeProvider.refresh(); vscode.window.showInformationMessage("Created: " + name); }
+    var folderName = name;
+    try { await remoteActivity.run("Updating remote files", function () { return api.createFolder(deploymentId, parentPath, folderName).then(function () { return undefined; }); }); treeProvider.refresh(); vscode.window.showInformationMessage("Created: " + folderName); }
     catch (err: any) { vscode.window.showErrorMessage("Failed: " + err.message); }
   }));
 
   context.subscriptions.push(vscode.commands.registerCommand("bb.compressFiles", async function (item: any) {
     if (!item?.deployment) return;
-    try { var result = await api.compressFiles(item.deployment.id, "/", []); vscode.window.showInformationMessage("Archive: " + result.archive); treeProvider.refresh(); }
+    try { var result = await remoteActivity.run("Updating remote files", function () { return api.compressFiles(item.deployment.id, "/", []); }); vscode.window.showInformationMessage("Archive: " + result.archive); treeProvider.refresh(); }
     catch (err: any) { vscode.window.showErrorMessage("Compress failed: " + err.message); }
   }));
 
   context.subscriptions.push(vscode.commands.registerCommand("bb.decompressFile", async function (item: FileItem) {
     if (!item) return;
     var path = item.parentPath === "/" ? "/" + item.file.name : item.parentPath + "/" + item.file.name;
-    try { await api.decompressFile(item.deploymentId, item.parentPath, item.file.name); treeProvider.refresh(); vscode.window.showInformationMessage("Decompressed " + item.file.name); }
+    try { await remoteActivity.run("Updating remote files", function () { return api.decompressFile(item.deploymentId, item.parentPath, item.file.name).then(function () { return undefined; }); }); treeProvider.refresh(); vscode.window.showInformationMessage("Decompressed " + item.file.name); }
     catch (err: any) { vscode.window.showErrorMessage("Decompress failed: " + err.message); }
   }));
 
@@ -527,25 +577,25 @@ export function activate(context: vscode.ExtensionContext) {
     if (!item?.deployment) return;
     var action = await vscode.window.showQuickPick(["start", "stop", "restart", "kill"], { placeHolder: "Select action" });
     if (!action) return;
-    try { await api.powerAction(item.deployment.id, action as any); vscode.window.showInformationMessage("Sent: " + action); setTimeout(function () { treeProvider.refresh(); }, 2000); }
+    try { var result = await runPowerAction(item.deployment.id, action as any); vscode.window.showInformationMessage("Deployment is " + (result.state || "processing") + "." + (result.hint ? " " + result.hint : "")); }
     catch (err: any) { vscode.window.showErrorMessage("Failed: " + err.message); }
   }));
 
   context.subscriptions.push(vscode.commands.registerCommand("bb.powerStart", async function (deploymentId?: string) {
     var dep = deploymentId ? treeProvider.getDeployment(deploymentId) : await pickDeployment(); if (!dep) return;
-    try { await api.powerAction(dep.id, "start"); vscode.window.showInformationMessage("Starting " + dep.name); setTimeout(function () { treeProvider.refresh(); }, 2000); }
+    try { var result = await runPowerAction(dep.id, "start"); vscode.window.showInformationMessage(dep.name + " is " + (result.state || "processing") + "." + (result.hint ? " " + result.hint : "")); }
     catch (err: any) { vscode.window.showErrorMessage("Failed: " + err.message); }
   }));
 
   context.subscriptions.push(vscode.commands.registerCommand("bb.powerStop", async function (deploymentId?: string) {
     var dep = deploymentId ? treeProvider.getDeployment(deploymentId) : await pickDeployment(); if (!dep) return;
-    try { await api.powerAction(dep.id, "stop"); vscode.window.showInformationMessage("Stopping " + dep.name); setTimeout(function () { treeProvider.refresh(); }, 2000); }
+    try { var result = await runPowerAction(dep.id, "stop"); vscode.window.showInformationMessage(dep.name + " is " + (result.state || "processing") + "." + (result.hint ? " " + result.hint : "")); }
     catch (err: any) { vscode.window.showErrorMessage("Failed: " + err.message); }
   }));
 
   context.subscriptions.push(vscode.commands.registerCommand("bb.powerRestart", async function (deploymentId?: string) {
     var dep = deploymentId ? treeProvider.getDeployment(deploymentId) : await pickDeployment(); if (!dep) return;
-    try { await api.powerAction(dep.id, "restart"); vscode.window.showInformationMessage("Restarting " + dep.name); setTimeout(function () { treeProvider.refresh(); }, 2000); }
+    try { var result = await runPowerAction(dep.id, "restart"); vscode.window.showInformationMessage(dep.name + " is " + (result.state || "processing") + "." + (result.hint ? " " + result.hint : "")); }
     catch (err: any) { vscode.window.showErrorMessage("Failed: " + err.message); }
   }));
 
@@ -794,9 +844,9 @@ export function activate(context: vscode.ExtensionContext) {
       }
       if (msg.type === "power") {
         try {
-          await api.powerAction(deploymentId, msg.action);
-          var stateLabel = msg.action === "start" ? "starting" : msg.action === "stop" ? "stopping" : "starting";
-          postMessage({ type: "powerResult", message: "Sent " + msg.action + ".", state: stateLabel });
+          var powerResult = await api.powerAction(deploymentId, msg.action, msg.action === "start" || msg.action === "restart" ? 20 : 0);
+          var stateLabel = powerResult.state || (msg.action === "start" ? "starting" : msg.action === "stop" ? "stopping" : "starting");
+          postMessage({ type: "powerResult", message: powerResult.hint || "Sent " + msg.action + ".", state: stateLabel });
           setTimeout(async function () {
             try {
               var fresh = await api.getResources(deploymentId);
